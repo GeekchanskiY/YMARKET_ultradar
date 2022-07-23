@@ -19,17 +19,31 @@ class Offer:
     description: str
     category: str
     price: float
+    availability: int
     currency: str = "RUB"
+    source: dict
 
-    def __init__(self, name, brand, img, detail_data, SKU, description, category, price):
+    def __init__(self, name, brand, img, detail_data, SKU, category, sources: list):
         self.name = name
         self.brand = brand
         self.img = img
         self.detail_data = detail_data
         self.SKU = SKU
-        self.description = description
         self.category = category
-        self.price = price
+        self.get_best_source(sources)
+
+    def get_best_source(self, sources: list):
+        best_availability = 0
+        best_price = 0
+        for source in sources:
+            if source["availability"] > best_availability:
+                best_availability = source["availability"]
+                best_price = source["price"]
+            elif source["availability"] == best_availability:
+                if source["price"] < best_price:
+                    best_price = source["price"]
+        self.price = best_price
+        self.availability: best_availability
 
     def get_non_sale_price(self) -> float:
         return (self.price/100)*15+self.price
@@ -48,6 +62,8 @@ class Offer:
 
 
 class Scraper:
+    offers: list[Offer] = []
+
     def __init__(self, category: str):
         self.driver: webdriver.Chrome = webdriver.Chrome(executable_path="chromedriver.exe")
         self.links: list = self.get_category(category)
@@ -76,11 +92,6 @@ class Scraper:
                 .get_attribute("src")
             self.driver.find_element(By.CLASS_NAME, "infoLink").click()
             self.wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "infoBlock")))
-            detail_data_el: WebElement = self.driver.find_element(By.CLASS_NAME, "infoBlock")
-            brand: str = detail_data_el.find_element(By.CLASS_NAME, "article-brand").text
-            number: str = detail_data_el.find_element(By.CLASS_NAME, "article-number").text
-            name: str = detail_data_el.find_element(By.CLASS_NAME, "brand").text.replace(number, "").replace(brand, "")\
-                .strip()
 
             for tr in table_body.find_elements(By.TAG_NAME, "tr"):
                 if tr.text == "Запрашиваемый артикул":
@@ -90,11 +101,17 @@ class Scraper:
                 sources.append({
                     "availability": tr.find_element(By.CLASS_NAME, "resultAvailability").text,
                     "price": tr.find_element(By.CLASS_NAME, "resultPrice").text,
-                    "name": name,
-                    "img": img,
                     
                 })
-            print(sources)
+            if sources[0]["availability"] == "Нет в продаже":
+                continue
+
+            detail_data_el: WebElement = self.driver.find_element(By.CLASS_NAME, "infoBlock")
+            detail_data_table: WebElement = detail_data_el.find_element(By.CLASS_NAME, "propertiesTable")
+            brand: str = detail_data_el.find_element(By.CLASS_NAME, "article-brand").text
+            number: str = detail_data_el.find_element(By.CLASS_NAME, "article-number").text
+            name: str = detail_data_el.find_element(By.CLASS_NAME, "brand").text.replace(number, "").replace(brand, "") \
+                .strip()
             
 
 if __name__ == '__main__':
