@@ -7,6 +7,21 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.remote.webelement import WebElement
 
 
+class Offer:
+    """
+        Offer dataclass with self formatting methods
+    """
+    name: str
+    brand: str
+    img: str
+    detail_data: list[dict[str, str]]
+    SKU: str
+    description: str
+    category: str
+    price: float
+    currency: str = "RUB"
+
+
 class Scraper:
     def __init__(self, category: str):
         self.driver: webdriver.Chrome = webdriver.Chrome(executable_path="chromedriver.exe")
@@ -37,6 +52,10 @@ class Scraper:
             self.driver.find_element(By.CLASS_NAME, "infoLink").click()
             self.wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "infoBlock")))
             detail_data_el: WebElement = self.driver.find_element(By.CLASS_NAME, "infoBlock")
+            brand: str = detail_data_el.find_element(By.CLASS_NAME, "article-brand").text
+            number: str = detail_data_el.find_element(By.CLASS_NAME, "article-number").text
+            name: str = detail_data_el.find_element(By.CLASS_NAME, "brand").text.replace(number, "").replace(brand, "")\
+                .strip()
 
             for tr in table_body.find_elements(By.TAG_NAME, "tr"):
                 if tr.text == "Запрашиваемый артикул":
@@ -46,6 +65,9 @@ class Scraper:
                 sources.append({
                     "availability": tr.find_element(By.CLASS_NAME, "resultAvailability").text,
                     "price": tr.find_element(By.CLASS_NAME, "resultPrice").text,
+                    "name": name,
+                    "img": img,
+                    
                 })
             print(sources)
             
