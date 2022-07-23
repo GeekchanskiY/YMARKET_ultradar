@@ -21,6 +21,31 @@ class Offer:
     price: float
     currency: str = "RUB"
 
+    def __init__(self, name, brand, img, detail_data, SKU, description, category, price):
+        self.name = name
+        self.brand = brand
+        self.img = img
+        self.detail_data = detail_data
+        self.SKU = SKU
+        self.description = description
+        self.category = category
+        self.price = price
+
+    def get_non_sale_price(self) -> float:
+        return (self.price/100)*15+self.price
+
+    def get_description(self) -> str:
+        return f'{self.category} {self.name} {self.description} с доставкой на дом и в офис'
+
+    def get_detail_str(self) -> str:
+        output: str = ""
+        for data_dict in self.detail_data:
+            if data_dict["name"].find(",") != -1:
+                output += f"{data_dict['name'].split(',')[0]}|{data_dict['value']}|{data_dict['name'].split(',')[1]};"
+            else:
+                output += f"{data_dict['name']}|{data_dict['value']};"
+        return output
+
 
 class Scraper:
     def __init__(self, category: str):
