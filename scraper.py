@@ -110,8 +110,29 @@ class Scraper:
             detail_data_table: WebElement = detail_data_el.find_element(By.CLASS_NAME, "propertiesTable")
             brand: str = detail_data_el.find_element(By.CLASS_NAME, "article-brand").text
             number: str = detail_data_el.find_element(By.CLASS_NAME, "article-number").text
-            name: str = detail_data_el.find_element(By.CLASS_NAME, "brand").text.replace(number, "").replace(brand, "") \
+            name: str = detail_data_el.find_element(By.CLASS_NAME, "brand").text.replace(number, "").replace(brand, "")\
                 .strip()
+            category: str = ""
+            model: str = ""
+            detail_data: list[dict] = []
+            tr: WebElement
+            for tr in detail_data_table.find_elements(By.TAG_NAME, "tr"):
+                row_items: list[WebElement] = tr.find_elements(By.TAG_NAME, "td")
+                item_name: str = row_items[0].text
+                item_value: str = row_items[1].text
+                if item_name == "Товарная группа:":
+                    pass
+                elif item_name == "Модель:":
+                    pass
+                elif item_name == "Тип:":
+                    pass
+                else:
+                    detail_data.append({"name": item_name.replace(":", ""), "value": item_value})
+
+
+
+
+            self.offers.append(Offer(name=name,))
             
 
 if __name__ == '__main__':
