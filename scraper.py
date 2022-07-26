@@ -78,23 +78,34 @@ class Offer:
 
 class Scraper:
     offers: list[Offer] = []
+    links: list
+    driver: webdriver.Chrome
+    wait: WebDriverWait
 
     def __init__(self, category: str):
         self.driver: webdriver.Chrome = webdriver.Chrome(executable_path="chromedriver.exe")
         self.links: list = self.get_category(category)
-        self.links = self.links[0:5]
         self.wait = WebDriverWait(self.driver, 10)
         self.get_detail()
 
     def get_category(self, link: str) -> list:
         output_data: list = []
-        self.driver.get(link)
-        time.sleep(1)
-        item_wrapper: WebElement = self.driver.find_element(By.CLASS_NAME, "item_ul")
-        items: list[WebElement] = item_wrapper.find_elements(By.TAG_NAME, "li")
-        for item in items:
-            output_data.append(item.find_element(By.CLASS_NAME, "articleDesc").find_elements(By.TAG_NAME, "a")[1]
-                               .get_attribute("href"))
+        for i in range(0, 99):
+            self.driver.get(link+f"&start={i*100}")
+            time.sleep(1)
+            try:
+                item_wrapper: WebElement = self.driver.find_element(By.CLASS_NAME, "item_ul")
+                items: list[WebElement] = item_wrapper.find_elements(By.TAG_NAME, "li")
+            except Exception as e:
+                print(str(e))
+                input("fix error and press enter")
+                continue
+            for item in items:
+                if item.text.lower().find("цена") != -1:
+                    output_data.append(item.find_element(By.CLASS_NAME, "articleDesc").find_elements(By.TAG_NAME, "a")
+                                       [1].get_attribute("href"))
+
+            print(len(output_data))
 
         return output_data
 
@@ -106,8 +117,11 @@ class Scraper:
                 table: WebElement = self.driver.find_element(By.ID, "searchResultsTable")
 
                 table_body: WebElement = table.find_element(By.TAG_NAME, "tbody")
-                img: str = self.driver.find_element(By.CLASS_NAME, "article-image").find_element(By.TAG_NAME, "img")\
-                    .get_attribute("src")
+                try:
+                    img: str = self.driver.find_element(By.CLASS_NAME, "article-image").find_element(By.TAG_NAME, "img")\
+                        .get_attribute("src")
+                except Exception:
+                    continue
                 self.driver.find_element(By.CLASS_NAME, "infoLink").click()
                 self.wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "infoBlock")))
                 i = 0
