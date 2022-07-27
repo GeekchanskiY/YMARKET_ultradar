@@ -231,7 +231,6 @@ class Scraper:
 
         if len(sources) == 0:
             return 0
-        print(len(sources))
 
         detail_data_el: WebElement = self.driver.find_element(By.CLASS_NAME, "infoBlock")
         detail_data_table: WebElement = detail_data_el.find_element(By.CLASS_NAME, "propertiesTable")
@@ -268,7 +267,7 @@ class Scraper:
             
 
 if __name__ == '__main__':
-    scraper: Scraper = Scraper("https://ultradar.ru/tool_sets_catalog")
-    xlsx_writer: XlsxWriter = XlsxWriter(scraper.get_offers(), "tool_sets_catalog")
+    scraper: Scraper = Scraper("https://ultradar.ru/car_seats_and_boosters_catalog")
+    xlsx_writer: XlsxWriter = XlsxWriter(scraper.get_offers(), "car_seats_and_boosters_catalog")
     scraper.driver.close()
     exit()
