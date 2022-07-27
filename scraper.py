@@ -80,6 +80,9 @@ class Offer:
 
 
 class Scraper:
+    """
+        Main Scraper class for ultradar.ru
+    """
     offers: list[Offer] = []
     links: list
     driver: webdriver.Chrome
@@ -87,12 +90,21 @@ class Scraper:
     rucaptcha: str = RUCAPTCHA_KEY
 
     def __init__(self, category: str):
+        """
+         Initialisation and running main data loop
+        :param category: - output file name
+        """
         self.driver: webdriver.Chrome = webdriver.Chrome(executable_path="chromedriver.exe")
-        self.links: list = self.get_category(category)
         self.wait = WebDriverWait(self.driver, 10)
+        self.links: list = self.get_category(category)
         self.get_detail_loop()
 
-    def get_category(self, link: str) -> list:
+    def get_category(self, link: str) -> list[str]:
+        """
+            Gets all unit links in category
+        :param link: category link
+        :return: list of links (str)
+        """
         pages: int
         self.driver.get(link+"?limit=100")
         self.driver.find_element(By.CLASS_NAME, "last").click()
@@ -122,7 +134,11 @@ class Scraper:
 
         return output_data
 
-    def get_detail_loop(self):
+    def get_detail_loop(self) -> None:
+        """
+           Calls get_detail method for each link or passing recaptcha method
+        :return:
+        """
         counter = 0
         links_length = len(self.links)
         for link in self.links:
@@ -138,22 +154,41 @@ class Scraper:
                         print(f"{link} skipped (invalid data)")
                     break
                 except Exception as e:
+                    # error: str = str(e)
                     print("Solving captcha")
                     self.solve_captcha()
                      
-    def solve_captcha(self):
-        SITE_KEY = self.driver.find_element(By.CLASS_NAME, "g-recaptcha").get_attribute("data-sitekey")
-        url = self.driver.current_url
-        answer_usual_re2 = ReCaptchaV2.ReCaptchaV2(rucaptcha_key=RUCAPTCHA_KEY).captcha_handler(
+    def solve_captcha(self) -> None:
+        """
+            Passes recaptcha on the driver's page
+        :return:
+        """
+
+        # getting all required params
+
+        SITE_KEY: str = self.driver.find_element(By.CLASS_NAME, "g-recaptcha").get_attribute("data-sitekey")
+        url: str = self.driver.current_url
+
+        # running rucaptcha
+
+        answer_usual_re2: dict = ReCaptchaV2.ReCaptchaV2(rucaptcha_key=RUCAPTCHA_KEY).captcha_handler(
             site_key=SITE_KEY, page_url=url
         )
-        el = self.driver.find_element(By.CLASS_NAME, "g-recaptcha-response")
+
+        # sending rucaptcha answer
+
+        el: WebElement = self.driver.find_element(By.CLASS_NAME, "g-recaptcha-response")
         self.driver.execute_script("arguments[0].innerHTML = arguments[1];", el,
                                    answer_usual_re2["captchaSolve"])
         self.driver.execute_script('$("#data").val($.urlParam("data"));')
         self.driver.execute_script('$("#form4mcRecaptcha").submit();')
 
-    def get_detail(self, link):
+    def get_detail(self, link) -> int:
+        """
+          Gets detail data of the unit and saves it to list of instance's scraped list
+        :param link: link with detail data
+        :return: 1 if scraped correctly, else 0
+        """
         self.driver.get(link)
         self.wait.until(EC.visibility_of_element_located((By.ID, "searchResultsTable")))
         table: WebElement = self.driver.find_element(By.ID, "searchResultsTable")
@@ -225,9 +260,15 @@ class Scraper:
         return 1
 
     def get_offers(self) -> list[Offer]:
+        """
+             Method for returning offers
+        :return: list of scraped offers
+        """
         return self.offers
             
 
 if __name__ == '__main__':
-    scraper = Scraper("https://ultradar.ru/tool_sets_catalog")
-    xlsx_writer = XlsxWriter(scraper.get_offers(), "tool_sets_catalog")
+    scraper: Scraper = Scraper("https://ultradar.ru/tool_sets_catalog")
+    xlsx_writer: XlsxWriter = XlsxWriter(scraper.get_offers(), "tool_sets_catalog")
+    scraper.driver.close()
+    exit()
