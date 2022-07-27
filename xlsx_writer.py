@@ -4,22 +4,34 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 
 class XlsxWriter:
+    """
+        Class for writing data to YMarket's workbook
+    """
     template: Workbook
     sheet: Worksheet
     category_name: str
 
-    def __init__(self, data, category_name):
+    def __init__(self, data, category_name) -> None:
         self.read_template()
         self.category_name = category_name
         self.write_new_data(data)
         self.save()
 
-    def read_template(self):
+    def read_template(self) -> None:
+        """
+          Reads YMarket template
+        :return:
+        """
         self.template = load_workbook('template.xlsx')
-        worksheets = self.template.worksheets
+        worksheets: list[Worksheet] = self.template.worksheets
         self.sheet = worksheets[1]
 
-    def write_new_data(self, data):
+    def write_new_data(self, data) -> None:
+        """
+          Writing data method
+        :param data: list of offer Objects
+        :return:
+        """
         for index, offer in enumerate(data):
             self.sheet.cell(index+5, 3).value = offer.SKU
             self.sheet.cell(index+5, 4).value = offer.name
@@ -34,7 +46,6 @@ class XlsxWriter:
             self.sheet.cell(index+5, 22).value = offer.currency
             self.sheet.cell(index+5, 29).value = 4
             self.sheet.cell(index+5, 30).value = 4
-            print("AAA")
             self.sheet.cell(index+5, 31).value = offer.availability
 
     def save(self):
