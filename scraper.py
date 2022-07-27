@@ -93,9 +93,13 @@ class Scraper:
         self.get_detail_loop()
 
     def get_category(self, link: str) -> list:
+        pages: int
+        self.driver.get(link+"?limit=100")
+        self.driver.find_element(By.CLASS_NAME, "last").click()
+        pages = int(self.driver.find_element(By.CLASS_NAME, "active").text)
         output_data: list = []
-        for i in range(0, 2):
-            self.driver.get(link+f"&start={i*100}")
+        for i in range(0, pages):
+            self.driver.get(link+f"?limit=100&start={i*100}")
             time.sleep(1)
             try:
                 item_wrapper: WebElement = self.driver.find_element(By.CLASS_NAME, "item_ul")
@@ -225,5 +229,5 @@ class Scraper:
             
 
 if __name__ == '__main__':
-    scraper = Scraper("https://ultradar.ru/tool_sets_catalog?limit=100")
-    xlsx_writer = XlsxWriter(scraper.get_offers(), "скутеры")
+    scraper = Scraper("https://ultradar.ru/tool_sets_catalog")
+    xlsx_writer = XlsxWriter(scraper.get_offers(), "tool_sets_catalog")
