@@ -86,11 +86,11 @@ class Scraper:
         self.driver: webdriver.Chrome = webdriver.Chrome(executable_path="chromedriver.exe")
         self.links: list = self.get_category(category)
         self.wait = WebDriverWait(self.driver, 10)
-        self.get_detail()
+        self.get_detail_loop()
 
     def get_category(self, link: str) -> list:
         output_data: list = []
-        for i in range(0, 99):
+        for i in range(0, 7):
             self.driver.get(link+f"&start={i*100}")
             time.sleep(1)
             try:
@@ -102,6 +102,11 @@ class Scraper:
                 continue
             for item in items:
                 if item.text.lower().find("цена") != -1:
+                    try:
+                        item.find_element(By.CLASS_NAME, "articleImages_noImage")
+                        continue
+                    except NoSuchElementException:
+                        pass
                     output_data.append(item.find_element(By.CLASS_NAME, "articleDesc").find_elements(By.TAG_NAME, "a")
                                        [1].get_attribute("href"))
 
@@ -109,87 +114,101 @@ class Scraper:
 
         return output_data
 
-    def get_detail(self):
+    def get_detail_loop(self):
+        counter = 0
+        links_length = len(self.links)
         for link in self.links:
-            try:
-                self.driver.get(link)
-                time.sleep(1)
-                table: WebElement = self.driver.find_element(By.ID, "searchResultsTable")
-
-                table_body: WebElement = table.find_element(By.TAG_NAME, "tbody")
+            counter += 1
+            print(f"{counter}/{links_length}")
+            i = 0
+            while i <= 5:
+                i += 1
                 try:
-                    img: str = self.driver.find_element(By.CLASS_NAME, "article-image").find_element(By.TAG_NAME, "img")\
-                        .get_attribute("src")
-                except Exception:
-                    continue
-                self.driver.find_element(By.CLASS_NAME, "infoLink").click()
-                self.wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "infoBlock")))
-                i = 0
+                    res = self.get_detail(link)
+                    if res != 1:
+                        print(f"{link} skipped (invalid data)")
+                except Exception as e:
+                    print("Solving captcha")
+                    self.solve_captcha()
+                     
+    def solve_captcha(self):
+        key = self.driver.find_element(By.CLASS_NAME, "g-recaptcha").get_attribute("data-sitekey")
+
+    def get_detail(self, link):
+        self.driver.get(link)
+        self.wait.until(EC.visibility_of_element_located((By.ID, "searchResultsTable")))
+        table: WebElement = self.driver.find_element(By.ID, "searchResultsTable")
+
+        table_body: WebElement = table.find_element(By.TAG_NAME, "tbody")
+        try:
+            img: str = self.driver.find_element(By.CLASS_NAME, "article-image").find_element(By.TAG_NAME, "img") \
+                .get_attribute("src")
+        except Exception:
+            return 0
+        self.driver.find_element(By.CLASS_NAME, "infoLink").click()
+        self.wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "infoBlock")))
+        i = 0
+        sources: list[dict] = []
+        while i <= 10:
+            try:
+
                 sources: list[dict] = []
-                while i <= 10:
-                    try:
-
-                        sources: list[dict] = []
-                        for tr in table_body.find_elements(By.TAG_NAME, "tr"):
-                            if tr.text == "Запрашиваемый артикул":
-                                continue
-                            elif tr.text == "Аналоги":
-                                break
-                            i = 1
-
-                            try:
-                                sources.append({
-                                    "availability": tr.find_element(By.CLASS_NAME, "resultAvailability").text,
-                                    "price": int(tr.find_element(By.CLASS_NAME, "resultPrice").text.replace("руб.", "")
-                                                 .replace(" ", "")),
-                                })
-                            except (ValueError, NoSuchElementException):
-                                continue
+                for tr in table_body.find_elements(By.TAG_NAME, "tr"):
+                    if tr.text == "Запрашиваемый артикул":
+                        continue
+                    elif tr.text == "Аналоги":
                         break
-                    except StaleElementReferenceException:
-                        i += 1
-                        time.sleep(0.2)
-                if i == 11:
-                    continue
+                    i = 1
 
-                if len(sources) == 0:
-                    continue
-                print(len(sources))
+                    try:
+                        sources.append({
+                            "availability": tr.find_element(By.CLASS_NAME, "resultAvailability").text,
+                            "price": int(tr.find_element(By.CLASS_NAME, "resultPrice").text.replace("руб.", "")
+                                         .replace(" ", "")),
+                        })
+                    except (ValueError, NoSuchElementException):
+                        continue
+                break
+            except StaleElementReferenceException:
+                i += 1
+                time.sleep(0.2)
+        if i == 11:
+            return 0
 
-                detail_data_el: WebElement = self.driver.find_element(By.CLASS_NAME, "infoBlock")
-                detail_data_table: WebElement = detail_data_el.find_element(By.CLASS_NAME, "propertiesTable")
-                brand: str = detail_data_el.find_element(By.CLASS_NAME, "article-brand").text
-                number: str = detail_data_el.find_element(By.CLASS_NAME, "article-number").text
-                name: str = detail_data_el.find_element(By.CLASS_NAME, "brand").text.replace(number, "").replace(brand, "")\
-                    .strip()
-                category: str = ""
-                model: str = ""
-                detail_data: list[dict] = []
-                tr: WebElement
-                for tr in detail_data_table.find_elements(By.TAG_NAME, "tr"):
-                    row_items: list[WebElement] = tr.find_elements(By.TAG_NAME, "td")
-                    item_name: str = row_items[0].text
-                    item_value: str = row_items[1].text
-                    if item_name == "Товарная группа:":
-                        pass
-                    elif item_name == "Модель:":
-                        pass
-                    elif item_name == "Тип:":
-                        pass
-                    else:
-                        detail_data.append({"name": item_name.replace(":", ""), "value": item_value})
-                url = link.split("?")[0]+"?utm_source=yandex&utm_medium=market&utm_campaign=script"
-                self.offers.append(Offer(name=name, brand=brand, img=img, detail_data=detail_data, category=category,
-                                         sources=sources, SKU=number, url=url))
-                time.sleep(random.randint(50, 200)/100)
-            except Exception as e:
-                print(str(e))
-                input("Сделай же что-нибудь! и тыкни enter!")
+        if len(sources) == 0:
+            return 0
+        print(len(sources))
+
+        detail_data_el: WebElement = self.driver.find_element(By.CLASS_NAME, "infoBlock")
+        detail_data_table: WebElement = detail_data_el.find_element(By.CLASS_NAME, "propertiesTable")
+        brand: str = detail_data_el.find_element(By.CLASS_NAME, "article-brand").text
+        number: str = detail_data_el.find_element(By.CLASS_NAME, "article-number").text
+        name: str = detail_data_el.find_element(By.CLASS_NAME, "brand").text.replace(number, "").replace(brand, "") \
+            .strip()
+        category: str = ""
+        detail_data: list[dict] = []
+        tr: WebElement
+        for tr in detail_data_table.find_elements(By.TAG_NAME, "tr"):
+            row_items: list[WebElement] = tr.find_elements(By.TAG_NAME, "td")
+            item_name: str = row_items[0].text
+            item_value: str = row_items[1].text
+            if item_name == "Товарная группа:":
+                pass
+            elif item_name == "Модель:":
+                pass
+            elif item_name == "Тип:":
+                pass
+            else:
+                detail_data.append({"name": item_name.replace(":", ""), "value": item_value})
+        url = link.split("?")[0] + "?utm_source=yandex&utm_medium=market&utm_campaign=script"
+        self.offers.append(Offer(name=name, brand=brand, img=img, detail_data=detail_data, category=category,
+                                 sources=sources, SKU=number, url=url))
+        return 1
 
     def get_offers(self) -> list[Offer]:
         return self.offers
             
 
 if __name__ == '__main__':
-    scraper = Scraper("https://ultradar.ru/disks_catalog?goods_group=disks&action=search&viewMode=tile&property%5Bdisk_type%5D%5B%5D=cast&property%5Bet%5D%5Bfrom%5D=&property%5Bet%5D%5Bto%5D=&property%5Bhub_diameter%5D%5Bfrom%5D=&property%5Bhub_diameter%5D%5Bto%5D=&limit=100")
-    xlsx_writer = XlsxWriter(scraper.get_offers(), "диски литые")
+    scraper = Scraper("https://ultradar.ru/tool_sets_catalog?limit=100")
+    xlsx_writer = XlsxWriter(scraper.get_offers(), "скутеры")
