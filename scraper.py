@@ -9,6 +9,10 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import StaleElementReferenceException
 
 from xlsx_writer import XlsxWriter
+
+from VARS import RUCAPTCHA_KEY
+
+from python_rucaptcha import ReCaptchaV2, RuCaptchaControl, CallbackClient
 import random
 
 
@@ -55,7 +59,6 @@ class Offer:
         else:
             self.availability = 0
 
-
     def get_non_sale_price(self) -> float:
         return (self.price/100)*15+self.price
 
@@ -81,6 +84,7 @@ class Scraper:
     links: list
     driver: webdriver.Chrome
     wait: WebDriverWait
+    rucaptcha: str = RUCAPTCHA_KEY
 
     def __init__(self, category: str):
         self.driver: webdriver.Chrome = webdriver.Chrome(executable_path="chromedriver.exe")
@@ -90,7 +94,7 @@ class Scraper:
 
     def get_category(self, link: str) -> list:
         output_data: list = []
-        for i in range(0, 7):
+        for i in range(0, 2):
             self.driver.get(link+f"&start={i*100}")
             time.sleep(1)
             try:
@@ -125,14 +129,25 @@ class Scraper:
                 i += 1
                 try:
                     res = self.get_detail(link)
+
                     if res != 1:
                         print(f"{link} skipped (invalid data)")
+                    break
                 except Exception as e:
                     print("Solving captcha")
                     self.solve_captcha()
                      
     def solve_captcha(self):
-        key = self.driver.find_element(By.CLASS_NAME, "g-recaptcha").get_attribute("data-sitekey")
+        SITE_KEY = self.driver.find_element(By.CLASS_NAME, "g-recaptcha").get_attribute("data-sitekey")
+        url = self.driver.current_url
+        answer_usual_re2 = ReCaptchaV2.ReCaptchaV2(rucaptcha_key=RUCAPTCHA_KEY).captcha_handler(
+            site_key=SITE_KEY, page_url=url
+        )
+        el = self.driver.find_element(By.CLASS_NAME, "g-recaptcha-response")
+        self.driver.execute_script("arguments[0].innerHTML = arguments[1];", el,
+                                   answer_usual_re2["captchaSolve"])
+        self.driver.execute_script('$("#data").val($.urlParam("data"));')
+        self.driver.execute_script('$("#form4mcRecaptcha").submit();')
 
     def get_detail(self, link):
         self.driver.get(link)
