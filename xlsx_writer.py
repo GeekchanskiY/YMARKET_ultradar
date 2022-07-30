@@ -50,8 +50,3 @@ class XlsxWriter:
 
     def save(self):
         self.template.save(self.category_name.replace(" ", "_")+".xlsx")
-
-
-if __name__ == '__main__':
-    a = XlsxWriter()
-    a.read_template()
