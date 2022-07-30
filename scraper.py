@@ -107,11 +107,13 @@ class Scraper:
         """
         pages: int
         self.driver.get(link+"?limit=100")
+        self.wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "item_ul")))
         self.driver.find_element(By.CLASS_NAME, "last").click()
         pages = int(self.driver.find_element(By.CLASS_NAME, "active").text)
         output_data: list = []
         for i in range(0, pages):
             self.driver.get(link+f"?limit=100&start={i*100}")
+            self.wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "item_ul")))
             time.sleep(1)
             try:
                 item_wrapper: WebElement = self.driver.find_element(By.CLASS_NAME, "item_ul")
@@ -267,7 +269,7 @@ class Scraper:
             
 
 if __name__ == '__main__':
-    scraper: Scraper = Scraper("https://ultradar.ru/car_seats_and_boosters_catalog")
-    xlsx_writer: XlsxWriter = XlsxWriter(scraper.get_offers(), "car_seats_and_boosters_catalog")
+    scraper: Scraper = Scraper("https://ultradar.ru/tires_catalog")
+    xlsx_writer: XlsxWriter = XlsxWriter(scraper.get_offers(), "tires_catalog")
     scraper.driver.close()
     exit()
