@@ -5,8 +5,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.remote.webelement import WebElement
-from selenium.common.exceptions import NoSuchElementException
-from selenium.common.exceptions import StaleElementReferenceException
+from selenium.common.exceptions import NoSuchElementException, NoSuchWindowException
+from selenium.common.exceptions import StaleElementReferenceException, TimeoutException, JavascriptException
 
 from xlsx_writer import XlsxWriter
 
@@ -46,13 +46,17 @@ class Offer:
     def get_best_source(self, sources: list):
         best_availability = 0
         best_price = 0
+
         for source in sources:
-            if int(source["availability"]) > best_availability:
-                best_availability = int(source["availability"])
-                best_price = source["price"]
-            elif int(source["availability"]) == best_availability:
-                if source["price"] < best_price:
+            try:
+                if int(source["availability"]) > best_availability:
+                    best_availability = int(source["availability"])
                     best_price = source["price"]
+                elif int(source["availability"]) == best_availability:
+                    if source["price"] < best_price:
+                        best_price = source["price"]
+            except ValueError:
+                continue
         self.price = best_price
         if best_availability > 5:
             self.availability = best_availability
@@ -88,6 +92,7 @@ class Scraper:
     driver: webdriver.Chrome
     wait: WebDriverWait
     rucaptcha: str = RUCAPTCHA_KEY
+    category_link: str
 
     def __init__(self, category: str):
         """
@@ -95,6 +100,7 @@ class Scraper:
         :param category: - output file name
         """
         self.driver: webdriver.Chrome = webdriver.Chrome(executable_path="chromedriver.exe")
+        self.category_link = category
         self.wait = WebDriverWait(self.driver, 10)
         self.links: list = self.get_category(category)
         self.get_detail_loop()
@@ -108,12 +114,23 @@ class Scraper:
         pages: int
         self.driver.get(link+"?limit=100")
         self.wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "item_ul")))
-        self.driver.find_element(By.CLASS_NAME, "last").click()
-        pages = int(self.driver.find_element(By.CLASS_NAME, "active").text)
+        try:
+            self.driver.find_element(By.CLASS_NAME, "last").click()
+            pages = int(self.driver.find_element(By.CLASS_NAME, "fr-pagination").find_element(By.CLASS_NAME, "active")
+                        .text)
+        except NoSuchElementException:
+            pages = 1
         output_data: list = []
         for i in range(0, pages):
             self.driver.get(link+f"?limit=100&start={i*100}")
-            self.wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "item_ul")))
+            while True:
+                try:
+                    self.wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "item_ul")))
+                    break
+                except TimeoutException:
+                    self.solve_captcha()
+                    time.sleep(2)
+                    self.driver.get(link + f"?limit=100&start={i * 100}")
             time.sleep(1)
             try:
                 item_wrapper: WebElement = self.driver.find_element(By.CLASS_NAME, "item_ul")
@@ -143,9 +160,18 @@ class Scraper:
         """
         counter = 0
         links_length = len(self.links)
+
         for link in self.links:
             counter += 1
+            if counter % 100 == 0:
+                self.driver.close()
+                self.driver = webdriver.Chrome(executable_path="chromedriver.exe")
+                self.wait = WebDriverWait(self.driver, 10)
             print(f"{counter}/{links_length}")
+            if counter % 1000 == 0:
+                xlsx_writer = XlsxWriter(self.get_offers(),
+                                         f"{self.category_link.replace('https://ultradar.ru/', '')}{counter}")
+                self.offers: list = []
             i = 0
             while i <= 5:
                 i += 1
@@ -155,10 +181,26 @@ class Scraper:
                     if res != 1:
                         print(f"{link} skipped (invalid data)")
                     break
-                except Exception as e:
+                except NoSuchWindowException:
+                    self.driver = webdriver.Chrome(executable_path="chromedriver.exe")
+                    self.wait = WebDriverWait(self.driver, 10)
+                except TimeoutException:
                     # error: str = str(e)
-                    print("Solving captcha")
-                    self.solve_captcha()
+                    try:
+                        print("Solving captcha")
+                        self.solve_captcha()
+                        time.sleep(5)
+                    except NoSuchWindowException:
+                        self.driver = webdriver.Chrome(executable_path="chromedriver.exe")
+                        self.wait = WebDriverWait(self.driver, 10)
+                    except:
+                        input("Чёт странное")
+
+        xlsx_writer = XlsxWriter(self.get_offers(), f"{self.category_link.replace('https://ultradar.ru/', '')}")
+
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.driver.close()
                      
     def solve_captcha(self) -> None:
         """
@@ -167,6 +209,7 @@ class Scraper:
         """
 
         # getting all required params
+        time.sleep(5)
 
         SITE_KEY: str = self.driver.find_element(By.CLASS_NAME, "g-recaptcha").get_attribute("data-sitekey")
         url: str = self.driver.current_url
@@ -182,8 +225,15 @@ class Scraper:
         el: WebElement = self.driver.find_element(By.CLASS_NAME, "g-recaptcha-response")
         self.driver.execute_script("arguments[0].innerHTML = arguments[1];", el,
                                    answer_usual_re2["captchaSolve"])
-        self.driver.execute_script('$("#data").val($.urlParam("data"));')
-        self.driver.execute_script('$("#form4mcRecaptcha").submit();')
+        try:
+            self.driver.execute_script('$("#data").val($.urlParam("data"));')
+            self.driver.execute_script('$("#form4mcRecaptcha").submit();')
+        except JavascriptException:
+            inputs: list[WebElement] = self.driver.find_element(By.TAG_NAME, "form").find_elements(By.TAG_NAME, 'input')
+            input_tag: WebElement
+            for input_tag in inputs:
+                if input_tag.get_attribute("type") == "submit":
+                    input_tag.click()
 
     def get_detail(self, link) -> int:
         """
@@ -193,6 +243,7 @@ class Scraper:
         """
         self.driver.get(link)
         self.wait.until(EC.visibility_of_element_located((By.ID, "searchResultsTable")))
+
         table: WebElement = self.driver.find_element(By.ID, "searchResultsTable")
 
         table_body: WebElement = table.find_element(By.TAG_NAME, "tbody")
@@ -269,7 +320,5 @@ class Scraper:
             
 
 if __name__ == '__main__':
-    scraper: Scraper = Scraper("https://ultradar.ru/tires_catalog")
-    xlsx_writer: XlsxWriter = XlsxWriter(scraper.get_offers(), "tires_catalog")
-    scraper.driver.close()
+    scraper: Scraper = Scraper("https://ultradar.ru/vacuum_cleaners_catalog")
     exit()
