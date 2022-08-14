@@ -139,7 +139,7 @@ class ScraperWithTimeLimit:
                 price.text = str(offer.price).replace(".", ",")
                 old_price = ET.SubElement(new_offer_elem, "oldprice")
                 old_price.text = str(offer.fake_price).replace(".", ",")
-                currency = ET.SubElement(new_offer_elem, "currencyID")
+                currency = ET.SubElement(new_offer_elem, "currencyId")
                 currency.text = "RUB"
                 vat = ET.SubElement(new_offer_elem, "vat")
                 vat.text = "NO_VAT"
