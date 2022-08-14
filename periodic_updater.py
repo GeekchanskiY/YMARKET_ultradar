@@ -281,8 +281,10 @@ class ScraperWithTimeLimit:
                 found = True
                 self.driver.get("https://ultradar.ru"+res.get_attribute("data-url"))
                 break
-
-        return self.get_ultradar_detail() if found else None
+        try:
+            return self.get_ultradar_detail() if found else None
+        except TimeoutException:
+            self.solve_captcha()
 
     def get_ultradar_detail(self) -> UOffer | None:
         self.wait.until(EC.visibility_of_element_located((By.ID, "searchResultsTable")))
@@ -359,8 +361,28 @@ class ScraperWithTimeLimit:
         print(f"Этап займёт: {to_update_len/self.per_day} дней")
         start_time = datetime.now()
         for index, offer in enumerate(self.to_update):
-            print(index)
-            new_data = self.find_on_ultradar(offer.SKU, offer.name)
+            if (index+1) % self.per_day == 0:
+                self.save_progress()
+                print("Данные сохранены, жду сутки")
+                pause.until(start_time+timedelta(days=1))
+
+                start_time = time.time()
+            print(index+1)
+            i = 0
+            while i <= 5:
+                i += 1
+                try:
+                    new_data = self.find_on_ultradar(offer.SKU, offer.name)
+                    break
+                except TimeoutException:
+                    try:
+                        print("Solving captcha")
+                        self.solve_captcha()
+                        time.sleep(5)
+                    except Exception as e:
+                        print(str(e))
+                        input("Чёт странное")
+
             offer.price = new_data.price
             offer.fake_price = (new_data.price/100)*120
             offer.upd = True
@@ -375,12 +397,6 @@ class ScraperWithTimeLimit:
                     offer.kvant = 4
                     offer.min_order = 4
 
-            if (index+1) % self.per_day == 0:
-                self.save_progress()
-                print("Данные сохранены, жду сутки")
-                pause.until(start_time+timedelta(days=1))
-
-                start_time = time.time()
 
 
 if __name__ == '__main__':
