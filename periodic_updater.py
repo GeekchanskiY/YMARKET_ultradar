@@ -170,12 +170,10 @@ class YMLCreator:
                 vat.text = "NO_VAT"
                 url = ET.SubElement(new_offer_elem, "url")
                 url.text = offer.home_url
-                count = ET.SubElement(new_offer_elem, "count")
-                count.text = "0"
                 min_quantity = ET.SubElement(new_offer_elem, "min-quantity")
-                min_quantity.text = offer.min_order
+                min_quantity.text = str(offer.min_order)
                 step_quantity = ET.SubElement(new_offer_elem, "step-quantity")
-                step_quantity.text = offer.kvant
+                step_quantity.text = str(offer.kvant)
                 available = ET.SubElement(new_offer_elem, "available")
                 if offer.upd:
                     available.text = "true"
@@ -361,6 +359,7 @@ class ScraperWithTimeLimit:
         print(f"Этап займёт: {to_update_len/self.per_day} дней")
         start_time = datetime.now()
         for index, offer in enumerate(self.to_update):
+            new_data = None
             if (index+1) % self.per_day == 0:
                 self.save_progress()
                 print("Данные сохранены, жду сутки")
@@ -373,7 +372,8 @@ class ScraperWithTimeLimit:
                 i += 1
                 try:
                     new_data = self.find_on_ultradar(offer.SKU, offer.name)
-                    break
+                    if new_data is not None:
+                        break
                 except TimeoutException:
                     try:
                         print("Solving captcha")
@@ -382,7 +382,8 @@ class ScraperWithTimeLimit:
                     except Exception as e:
                         print(str(e))
                         input("Чёт странное")
-
+            if new_data is None:
+                continue
             offer.price = new_data.price
             offer.fake_price = (new_data.price/100)*120
             offer.upd = True
