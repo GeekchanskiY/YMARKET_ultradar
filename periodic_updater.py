@@ -3,7 +3,6 @@ from unittest import mock
 import pause
 
 from openpyxl import load_workbook
-from openpyxl import Workbook
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -190,7 +189,7 @@ class ScraperWithTimeLimit:
         self.per_day = per_day
         self.filename = filename
         self.driver = webdriver.Chrome("chromedriver.exe")
-        self.wait = WebDriverWait(self.driver, 10)
+        self.wait = WebDriverWait(self.driver, 4)
         self.to_update: list[Offer] = []
         self.updated: list[Offer] = []
         self.read_to_update()
@@ -268,21 +267,8 @@ class ScraperWithTimeLimit:
                     input_tag.click()
 
     def find_on_ultradar(self, sku, name) -> UOffer | None:
-        self.driver.get("https://ultradar.ru/")
-        search_form = self.driver.find_element(By.CLASS_NAME, "searchFormContainer")
-        search_form.find_element(By.TAG_NAME, 'input').send_keys(sku)
-        time.sleep(2)
-        found = False
-        results = self.driver.find_element(By.CLASS_NAME, "ui-autocomplete")
-        for res in results.find_elements(By.TAG_NAME, "tr"):
-            if res.find_elements(By.TAG_NAME, "td")[1].text == sku and res.find_elements(By.TAG_NAME, "td")[2].text == name:
-                found = True
-                self.driver.get("https://ultradar.ru"+res.get_attribute("data-url"))
-                break
-        try:
-            return self.get_ultradar_detail() if found else None
-        except TimeoutException:
-            self.solve_captcha()
+        self.driver.get(f"https://ultradar.ru/search/{name}/{sku}")
+        return self.get_ultradar_detail()
 
     def get_ultradar_detail(self) -> UOffer | None:
         self.wait.until(EC.visibility_of_element_located((By.ID, "searchResultsTable")))
@@ -359,30 +345,36 @@ class ScraperWithTimeLimit:
         print(f"Этап займёт: {to_update_len/self.per_day} дней")
         start_time = datetime.now()
         for index, offer in enumerate(self.to_update):
-            new_data = None
             if (index+1) % self.per_day == 0:
+
                 self.save_progress()
                 print("Данные сохранены, жду сутки")
                 pause.until(start_time+timedelta(days=1))
 
-                start_time = time.time()
+                start_time = datetime.now()
             print(index+1)
             i = 0
-            while i <= 5:
-                i += 1
-                try:
-                    new_data = self.find_on_ultradar(offer.SKU, offer.name)
-                    if new_data is not None:
-                        break
-                except TimeoutException:
+            invalid = False
+            try:
+                while i <= 3:
+                    i += 1
                     try:
+                        print(offer.SKU)
+                        new_data = self.find_on_ultradar(offer.SKU, offer.brand)
+                        if new_data is not None:
+                            break
+
+                    except: # noqot
                         print("Solving captcha")
                         self.solve_captcha()
                         time.sleep(5)
-                    except Exception as e:
-                        print(str(e))
-                        input("Чёт странное")
-            if new_data is None:
+
+
+            except Exception as e:
+                print(str(e))
+                continue
+
+            if new_data is None or invalid:
                 continue
             offer.price = new_data.price
             offer.fake_price = (new_data.price/100)*120
@@ -393,11 +385,10 @@ class ScraperWithTimeLimit:
                 offer.availability = 0
             offer.kvant = 1
             offer.min_order = 1
-            if offer.category.find("диски") != 1 or offer.category.find("disks") != 1:
+            if offer.category.lower().find("диск") != 1 or offer.category.lower().find("disk") != 1:
                 if 20 >= offer.availability > 3:
                     offer.kvant = 4
                     offer.min_order = 4
-
 
 
 if __name__ == '__main__':
