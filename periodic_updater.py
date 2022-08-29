@@ -16,7 +16,7 @@ import time
 
 from python_rucaptcha import ReCaptchaV2
 import xml.etree.ElementTree as ET
-
+import random
 from dataclasses import dataclass
 
 # Set max font family value to 100
@@ -44,6 +44,9 @@ class Offer:
 
     kvant: int
     min_order: int
+
+    weight: str = "1.0"
+    dimensions: str = "10/10/10"
     
     currency: str = "RUB"
     bar_code: str = None
@@ -66,8 +69,10 @@ class UOffer:
     currency: str = "RUB"
     source: dict
     home_url: str
+    weight: str
+    dimensions: str
 
-    def __init__(self, name, brand, img, detail_data, SKU, category, sources: list, url):
+    def __init__(self, name, brand, img, detail_data, SKU, category, sources: list, url, weight, dimensions):
         self.name = name
         self.brand = brand
         self.img = img
@@ -76,6 +81,8 @@ class UOffer:
         self.category = category
         self.get_best_source(sources)
         self.home_url = url
+        self.weight = weight
+        self.dimensions = dimensions
 
     def get_best_source(self, sources: list):
         best_availability = 0
@@ -136,6 +143,7 @@ class YMLCreator:
             new_elem = ET.SubElement(categories_tag, "category", id=str(index + 1))
             new_elem.text = category
             for offer in filter(lambda l_offer: l_offer.category == category, offers):
+
                 new_offer_elem = ET.SubElement(offers_tag, "offer", id=offer.SKU)
                 offer_name = ET.SubElement(new_offer_elem, "name")
                 offer_name.text = offer.name
@@ -150,6 +158,9 @@ class YMLCreator:
                 if offer.bar_code is not None:
                     bar_code = ET.SubElement(new_offer_elem, "barcode")
                     bar_code.text = offer.bar_code
+                else:
+                    bar_code = ET.SubElement(new_offer_elem, "barcode")
+                    bar_code.text = str(4000000000000 + random.randint(1000000000, 1000000000000))
 
                 for param in offer.detail_data.split(";"):
                     if len(param.split("|")) == 2:
@@ -173,19 +184,28 @@ class YMLCreator:
                 min_quantity.text = str(offer.min_order)
                 step_quantity = ET.SubElement(new_offer_elem, "step-quantity")
                 step_quantity.text = str(offer.kvant)
-                available = ET.SubElement(new_offer_elem, "available")
+                dimensions = ET.SubElement(new_offer_elem, "dimensions")
+                dimensions.text = str(offer.dimensions)
+                weight = ET.SubElement(new_offer_elem, "weight")
+                weight.text = str(offer.weight)
+                disabled = ET.SubElement(new_offer_elem, "disabled")
                 if offer.upd:
-                    available.text = "true"
+                    disabled.text = "false"
                 else:
-                    available.text = "false"
+                    disabled.text = "true"
+
                 count = ET.SubElement(new_offer_elem, "count")
-                count.text = str(offer.availability)
+                if offer.upd:
+                    count.text = str(offer.availability)
+                else:
+                    count.text = str(0)
         with open("output.yml", "wb") as f:
             tree.write(f, encoding="utf-8", xml_declaration=True)
 
 
 class ScraperWithTimeLimit:
     def __init__(self, per_day, filename):
+        self.start_time = datetime.now()
         self.per_day = per_day
         self.filename = filename
         self.driver = webdriver.Chrome("chromedriver.exe")
@@ -324,6 +344,10 @@ class ScraperWithTimeLimit:
         category: str = ""
         detail_data: list[dict] = []
         tr: WebElement
+        weight: str = "1"
+        height: int = 100
+        width: int = 100
+        length: int = 100
         for tr in detail_data_table.find_elements(By.TAG_NAME, "tr"):
             row_items: list[WebElement] = tr.find_elements(By.TAG_NAME, "td")
             item_name: str = row_items[0].text
@@ -334,27 +358,38 @@ class ScraperWithTimeLimit:
                 pass
             elif item_name == "Тип:":
                 pass
+            elif item_name == "Масса, кг:":
+                weight = item_value
+            elif item_name == "Ширина, мм:":
+                width = int(item_value)
+            elif item_name == "Высота, мм:":
+                height = int(item_value)
+            elif item_name == "Длина, мм:":
+                length = int(item_value)
             else:
                 detail_data.append({"name": item_name.replace(":", ""), "value": item_value})
+
+        dimensions: str = f"{int(width)/10}/{int(height)/10}/{int(length)/10}"
+        print(dimensions)
         url = self.driver.current_url + "?utm_source=yandex&utm_medium=market&utm_campaign=script"
         return UOffer(name=name, brand=brand, img=img, detail_data=detail_data, category=category,
-                      sources=sources, SKU=number, url=url)
+                      sources=sources, SKU=number, url=url, weight=weight, dimensions=dimensions)
 
     def run(self):
         to_update_len = len(self.to_update)
         print(f"Этап займёт: {to_update_len/self.per_day} дней")
-        start_time = datetime.now()
         for index, offer in enumerate(self.to_update):
             if (index+1) % self.per_day == 0:
 
                 self.save_progress()
                 print("Данные сохранены, жду сутки")
-                pause.until(start_time+timedelta(days=1))
+                pause.until(self.start_time+timedelta(days=1))
 
-                start_time = datetime.now()
+                self.start_time = datetime.now()
             print(index+1)
             i = 0
             invalid = False
+            new_data = None
             try:
                 while i <= 3:
                     i += 1
@@ -364,8 +399,9 @@ class ScraperWithTimeLimit:
                         if new_data is not None:
                             break
 
-                    except: # noqot
-                        print("Solving captcha")
+                    except Exception as e:
+
+                        print(str(e))
                         self.solve_captcha()
                         time.sleep(5)
 
@@ -378,6 +414,8 @@ class ScraperWithTimeLimit:
                 continue
             offer.price = new_data.price
             offer.fake_price = (new_data.price/100)*120
+            offer.dimensions = new_data.dimensions
+            offer.weight = new_data.weight
             offer.upd = True
             if new_data.availability >= 5:
                 offer.availability = new_data.availability
